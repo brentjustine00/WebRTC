@@ -15,6 +15,7 @@ export default function Call({ onLogout }) {
   const [pipPosition, setPipPosition] = useState(null);
   const [localAspectRatio, setLocalAspectRatio] = useState("16 / 9");
   const offerSentForAcceptedRef = useRef(false);
+  const isCallerRef = useRef(false);
   const ringtoneTimerRef = useRef(null);
   const audioContextRef = useRef(null);
   const stageRef = useRef(null);
@@ -28,6 +29,8 @@ export default function Call({ onLogout }) {
     roomFull,
     participantCount,
     callStatus,
+    callStatusSender,
+    userId,
     registerSignalHandler,
     publishSignal,
     clearSignals,
@@ -123,7 +126,12 @@ export default function Call({ onLogout }) {
   };
 
   useEffect(() => {
-    if (callStatus === "ringing" && !isCaller && !inCall) {
+    if (
+      callStatus === "ringing" &&
+      !isCallerRef.current &&
+      callStatusSender !== userId &&
+      !inCall
+    ) {
       setShowRingingModal(true);
       playRingtone();
       offerSentForAcceptedRef.current = false;
@@ -142,6 +150,7 @@ export default function Call({ onLogout }) {
       stopRingtone();
       setShowRingingModal(false);
       setIsCaller(false);
+      isCallerRef.current = false;
       offerSentForAcceptedRef.current = false;
     }
 
@@ -149,10 +158,11 @@ export default function Call({ onLogout }) {
       stopRingtone();
       setShowRingingModal(false);
       setIsCaller(false);
+      isCallerRef.current = false;
       offerSentForAcceptedRef.current = false;
       endCall();
     }
-  }, [callStatus, createAndSendOffer, endCall, inCall, isCaller]);
+  }, [callStatus, callStatusSender, createAndSendOffer, endCall, inCall, userId]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -171,13 +181,18 @@ export default function Call({ onLogout }) {
   }, []);
 
   const handleCall = async () => {
+    isCallerRef.current = true;
     setIsCaller(true);
     offerSentForAcceptedRef.current = false;
+    setShowRingingModal(false);
+    stopRingtone();
     await preparePeer();
     await updateCallStatus("ringing");
   };
 
   const handleAccept = async () => {
+    isCallerRef.current = false;
+    setIsCaller(false);
     stopRingtone();
     setShowRingingModal(false);
     await preparePeer();
@@ -188,12 +203,14 @@ export default function Call({ onLogout }) {
     stopRingtone();
     setShowRingingModal(false);
     setIsCaller(false);
+    isCallerRef.current = false;
     await updateCallStatus("declined");
   };
 
   const handleEnd = async () => {
     endCall();
     setIsCaller(false);
+    isCallerRef.current = false;
     offerSentForAcceptedRef.current = false;
     await updateCallStatus("ended");
   };

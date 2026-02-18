@@ -10,6 +10,7 @@ export function useSignaling(roomName, enabled) {
   const [roomFull, setRoomFull] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
   const [callStatus, setCallStatusState] = useState("idle");
+  const [callStatusSender, setCallStatusSender] = useState(null);
   const [ready, setReady] = useState(false);
   const signalHandlerRef = useRef(null);
   const statusHandlerRef = useRef(null);
@@ -125,6 +126,7 @@ export function useSignaling(roomName, enabled) {
     async (status) => {
       // Keep local UI responsive regardless of database path.
       setCallStatusState(status);
+      setCallStatusSender(userId);
 
       if (!hasCallStatusTableRef.current) {
         await publishCallStatusBroadcast(status);
@@ -159,7 +161,7 @@ export function useSignaling(roomName, enabled) {
 
       console.error("Failed to update call status:", error.message);
     },
-    [publishCallStatusBroadcast],
+    [publishCallStatusBroadcast, userId],
   );
 
   useEffect(() => {
@@ -193,10 +195,12 @@ export function useSignaling(roomName, enabled) {
       })
       .on("broadcast", { event: "call_status" }, (payload) => {
         const status = payload?.payload?.status;
+        const sender = payload?.payload?.sender ?? null;
         if (!status) {
           return;
         }
         setCallStatusState(status);
+        setCallStatusSender(sender);
         statusHandlerRef.current?.(status);
       })
       .on(
@@ -219,6 +223,7 @@ export function useSignaling(roomName, enabled) {
             return;
           }
           setCallStatusState(row.status);
+          setCallStatusSender(null);
           statusHandlerRef.current?.(row.status);
         },
       )
@@ -265,6 +270,7 @@ export function useSignaling(roomName, enabled) {
 
       if (data?.status) {
         setCallStatusState(data.status);
+        setCallStatusSender(null);
       }
     };
     loadStatus();
@@ -286,6 +292,7 @@ export function useSignaling(roomName, enabled) {
     roomFull,
     participantCount,
     callStatus,
+    callStatusSender,
     registerSignalHandler,
     registerStatusHandler,
     publishSignal,
