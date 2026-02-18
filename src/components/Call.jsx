@@ -13,7 +13,6 @@ export default function Call({ onLogout }) {
   const [uiVisible, setUiVisible] = useState(true);
   const [isDraggingPip, setIsDraggingPip] = useState(false);
   const [pipPosition, setPipPosition] = useState(null);
-  const [remoteAspectRatio, setRemoteAspectRatio] = useState("16 / 9");
   const [localAspectRatio, setLocalAspectRatio] = useState("16 / 9");
   const offerSentForAcceptedRef = useRef(false);
   const ringtoneTimerRef = useRef(null);
@@ -84,16 +83,10 @@ export default function Call({ onLogout }) {
     };
 
     const unbindLocal = bindVideoAspect(localVideoRef.current, setLocalAspectRatio);
-    const unbindRemote = bindVideoAspect(
-      remoteVideoRef.current,
-      setRemoteAspectRatio,
-    );
-
     return () => {
       unbindLocal();
-      unbindRemote();
     };
-  }, [localVideoRef, remoteVideoRef, mediaReady, inCall]);
+  }, [localVideoRef, mediaReady, inCall]);
 
   const stopRingtone = () => {
     if (ringtoneTimerRef.current) {
@@ -399,7 +392,7 @@ export default function Call({ onLogout }) {
         onAccept={handleAccept}
         onDecline={handleDecline}
       />
-      <div className="remote-video-shell" style={{ aspectRatio: remoteAspectRatio }}>
+      <div className="remote-video-shell">
         <video className="remote-video" ref={remoteVideoRef} autoPlay playsInline />
       </div>
       <div className="stage-shade" />
