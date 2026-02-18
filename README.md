@@ -65,6 +65,11 @@ VITE_PRIVATE_ROOM_PASSWORD=your-private-shared-password
    - `public.call_status`
 4. Use project URL + anon key in `.env`.
 
+If your project shows:
+`Could not find the table 'public.call_status' in the schema cache`
+run:
+- `supabase/fix_call_status.sql`
+
 ## Install & Run
 
 ```bash

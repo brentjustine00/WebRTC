@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 
+const MISSING_TABLE_PATTERN = "Could not find the table 'public.call_status'";
+
 export function useSignaling(roomName, enabled) {
   const [roomFull, setRoomFull] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
@@ -10,6 +12,8 @@ export function useSignaling(roomName, enabled) {
   const statusHandlerRef = useRef(null);
   const userIdRef = useRef(crypto.randomUUID());
   const channelRef = useRef(null);
+  const hasCallStatusTableRef = useRef(true);
+  const missingTableLoggedRef = useRef(false);
 
   const userId = userIdRef.current;
   const channelName = useMemo(() => `private-call:${roomName}`, [roomName]);
@@ -36,6 +40,20 @@ export function useSignaling(roomName, enabled) {
     [userId],
   );
 
+  const publishCallStatusBroadcast = useCallback(
+    async (status) => {
+      if (!channelRef.current) {
+        return;
+      }
+      await channelRef.current.send({
+        type: "broadcast",
+        event: "call_status",
+        payload: { status, sender: userId },
+      });
+    },
+    [userId],
+  );
+
   const clearSignals = useCallback(async () => {
     const { error } = await supabase
       .from("signals")
@@ -46,19 +64,46 @@ export function useSignaling(roomName, enabled) {
     }
   }, []);
 
-  const updateCallStatus = useCallback(async (status) => {
-    const { error } = await supabase.from("call_status").upsert(
-      {
-        id: 1,
-        status,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" },
-    );
-    if (error) {
+  const updateCallStatus = useCallback(
+    async (status) => {
+      // Keep local UI responsive regardless of database path.
+      setCallStatusState(status);
+
+      if (!hasCallStatusTableRef.current) {
+        await publishCallStatusBroadcast(status);
+        return;
+      }
+
+      const { error } = await supabase.from("call_status").upsert(
+        {
+          id: 1,
+          status,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
+
+      if (!error) {
+        await publishCallStatusBroadcast(status);
+        return;
+      }
+
+      if (error.message?.includes(MISSING_TABLE_PATTERN)) {
+        hasCallStatusTableRef.current = false;
+        if (!missingTableLoggedRef.current) {
+          missingTableLoggedRef.current = true;
+          console.warn(
+            "call_status table missing in Supabase schema cache. Falling back to Realtime broadcast. Run supabase/schema.sql to restore DB-backed call_status.",
+          );
+        }
+        await publishCallStatusBroadcast(status);
+        return;
+      }
+
       console.error("Failed to update call status:", error.message);
-    }
-  }, []);
+    },
+    [publishCallStatusBroadcast],
+  );
 
   useEffect(() => {
     if (!enabled) {
@@ -82,6 +127,14 @@ export function useSignaling(roomName, enabled) {
 
     channel
       .on("presence", { event: "sync" }, syncPresence)
+      .on("broadcast", { event: "call_status" }, (payload) => {
+        const status = payload?.payload?.status;
+        if (!status) {
+          return;
+        }
+        setCallStatusState(status);
+        statusHandlerRef.current?.(status);
+      })
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "signals" },
@@ -121,11 +174,31 @@ export function useSignaling(roomName, enabled) {
       });
 
     const loadStatus = async () => {
-      const { data } = await supabase
+      if (!hasCallStatusTableRef.current) {
+        return;
+      }
+
+      const { data, error } = await supabase
         .from("call_status")
         .select("status")
         .eq("id", 1)
         .maybeSingle();
+
+      if (error) {
+        if (error.message?.includes(MISSING_TABLE_PATTERN)) {
+          hasCallStatusTableRef.current = false;
+          if (!missingTableLoggedRef.current) {
+            missingTableLoggedRef.current = true;
+            console.warn(
+              "call_status table missing in Supabase schema cache. Falling back to Realtime broadcast. Run supabase/schema.sql to restore DB-backed call_status.",
+            );
+          }
+          return;
+        }
+        console.error("Failed to load call status:", error.message);
+        return;
+      }
+
       if (data?.status) {
         setCallStatusState(data.status);
       }
