@@ -70,6 +70,11 @@ If your project shows:
 run:
 - `supabase/fix_call_status.sql`
 
+If your project shows:
+`Could not find the table 'public.signals' in the schema cache`
+run:
+- `supabase/fix_signals.sql`
+
 ## Install & Run
 
 ```bash

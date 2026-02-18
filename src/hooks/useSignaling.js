@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
 
-const MISSING_TABLE_PATTERN = "Could not find the table 'public.call_status'";
+const MISSING_CALL_STATUS_TABLE_PATTERN =
+  "Could not find the table 'public.call_status'";
+const MISSING_SIGNALS_TABLE_PATTERN =
+  "Could not find the table 'public.signals'";
 
 export function useSignaling(roomName, enabled) {
   const [roomFull, setRoomFull] = useState(false);
@@ -13,7 +16,9 @@ export function useSignaling(roomName, enabled) {
   const userIdRef = useRef(crypto.randomUUID());
   const channelRef = useRef(null);
   const hasCallStatusTableRef = useRef(true);
-  const missingTableLoggedRef = useRef(false);
+  const hasSignalsTableRef = useRef(true);
+  const missingCallStatusLoggedRef = useRef(false);
+  const missingSignalsLoggedRef = useRef(false);
 
   const userId = userIdRef.current;
   const channelName = useMemo(() => `private-call:${roomName}`, [roomName]);
@@ -26,18 +31,54 @@ export function useSignaling(roomName, enabled) {
     statusHandlerRef.current = handler;
   }, []);
 
+  const publishSignalBroadcast = useCallback(
+    async (type, payload) => {
+      if (!channelRef.current) {
+        return;
+      }
+      await channelRef.current.send({
+        type: "broadcast",
+        event: "signal",
+        payload: { type, payload, sender: userId },
+      });
+    },
+    [userId],
+  );
+
   const publishSignal = useCallback(
     async (type, payload) => {
+      if (!hasSignalsTableRef.current) {
+        await publishSignalBroadcast(type, payload);
+        return;
+      }
+
       const { error } = await supabase.from("signals").insert({
         type,
         payload,
         sender: userId,
       });
+
+      if (!error) {
+        return;
+      }
+
+      if (error.message?.includes(MISSING_SIGNALS_TABLE_PATTERN)) {
+        hasSignalsTableRef.current = false;
+        if (!missingSignalsLoggedRef.current) {
+          missingSignalsLoggedRef.current = true;
+          console.warn(
+            "signals table missing in Supabase schema cache. Falling back to Realtime broadcast signaling. Run supabase/schema.sql or supabase/fix_signals.sql.",
+          );
+        }
+        await publishSignalBroadcast(type, payload);
+        return;
+      }
+
       if (error) {
         console.error("Failed to publish signal:", error.message);
       }
     },
-    [userId],
+    [publishSignalBroadcast, userId],
   );
 
   const publishCallStatusBroadcast = useCallback(
@@ -55,10 +96,26 @@ export function useSignaling(roomName, enabled) {
   );
 
   const clearSignals = useCallback(async () => {
+    if (!hasSignalsTableRef.current) {
+      return;
+    }
+
     const { error } = await supabase
       .from("signals")
       .delete()
       .lt("created_at", new Date(Date.now() + 60_000).toISOString());
+
+    if (error?.message?.includes(MISSING_SIGNALS_TABLE_PATTERN)) {
+      hasSignalsTableRef.current = false;
+      if (!missingSignalsLoggedRef.current) {
+        missingSignalsLoggedRef.current = true;
+        console.warn(
+          "signals table missing in Supabase schema cache. Falling back to Realtime broadcast signaling. Run supabase/schema.sql or supabase/fix_signals.sql.",
+        );
+      }
+      return;
+    }
+
     if (error) {
       console.error("Failed to clear signals:", error.message);
     }
@@ -88,10 +145,10 @@ export function useSignaling(roomName, enabled) {
         return;
       }
 
-      if (error.message?.includes(MISSING_TABLE_PATTERN)) {
+      if (error.message?.includes(MISSING_CALL_STATUS_TABLE_PATTERN)) {
         hasCallStatusTableRef.current = false;
-        if (!missingTableLoggedRef.current) {
-          missingTableLoggedRef.current = true;
+        if (!missingCallStatusLoggedRef.current) {
+          missingCallStatusLoggedRef.current = true;
           console.warn(
             "call_status table missing in Supabase schema cache. Falling back to Realtime broadcast. Run supabase/schema.sql to restore DB-backed call_status.",
           );
@@ -127,6 +184,13 @@ export function useSignaling(roomName, enabled) {
 
     channel
       .on("presence", { event: "sync" }, syncPresence)
+      .on("broadcast", { event: "signal" }, (payload) => {
+        const signal = payload?.payload;
+        if (!signal || signal.sender === userId || !subscribed) {
+          return;
+        }
+        signalHandlerRef.current?.(signal);
+      })
       .on("broadcast", { event: "call_status" }, (payload) => {
         const status = payload?.payload?.status;
         if (!status) {
@@ -185,10 +249,10 @@ export function useSignaling(roomName, enabled) {
         .maybeSingle();
 
       if (error) {
-        if (error.message?.includes(MISSING_TABLE_PATTERN)) {
+        if (error.message?.includes(MISSING_CALL_STATUS_TABLE_PATTERN)) {
           hasCallStatusTableRef.current = false;
-          if (!missingTableLoggedRef.current) {
-            missingTableLoggedRef.current = true;
+          if (!missingCallStatusLoggedRef.current) {
+            missingCallStatusLoggedRef.current = true;
             console.warn(
               "call_status table missing in Supabase schema cache. Falling back to Realtime broadcast. Run supabase/schema.sql to restore DB-backed call_status.",
             );
