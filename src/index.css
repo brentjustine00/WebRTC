@@ -116,6 +116,22 @@ button:disabled {
   max-height: 100vh;
 }
 
+.pip-local-source {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pip-canvas-source {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .remote-video {
   width: 100%;
   height: 100%;

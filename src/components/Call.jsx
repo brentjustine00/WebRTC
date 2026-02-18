@@ -26,6 +26,9 @@ export default function Call({ onLogout }) {
   const audioContextRef = useRef(null);
   const stageRef = useRef(null);
   const localPipRef = useRef(null);
+  const pipLocalVideoRef = useRef(null);
+  const pipCanvasRef = useRef(null);
+  const pipAnimationRef = useRef(null);
   const hideTimerRef = useRef(null);
   const uiVisibleRef = useRef(true);
   const dragRef = useRef(null);
@@ -59,6 +62,7 @@ export default function Call({ onLogout }) {
     endCall,
     toggleMute,
     toggleCamera,
+    getLocalStream,
   } = useWebRTC({
     enabled: ready && !roomFull,
     publishSignal,
@@ -97,6 +101,80 @@ export default function Call({ onLogout }) {
       unbindLocal();
     };
   }, [localVideoRef, mediaReady, inCall]);
+
+  useEffect(() => {
+    const pipVideoEl = pipLocalVideoRef.current;
+    const localStream = getLocalStream();
+    const canvas = pipCanvasRef.current;
+    if (!pipVideoEl || !localStream || !canvas) {
+      return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+
+    const localVideoEl = localVideoRef.current;
+    const remoteVideoEl = remoteVideoRef.current;
+    canvas.width = 720;
+    canvas.height = 405;
+
+    const render = () => {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const halfW = canvas.width / 2;
+      const h = canvas.height;
+
+      if (remoteVideoEl && remoteVideoEl.videoWidth > 0 && remoteVideoEl.videoHeight > 0) {
+        ctx.drawImage(remoteVideoEl, 0, 0, halfW, h);
+      } else {
+        ctx.fillStyle = "#111";
+        ctx.fillRect(0, 0, halfW, h);
+      }
+
+      if (localVideoEl && localVideoEl.videoWidth > 0 && localVideoEl.videoHeight > 0) {
+        ctx.save();
+        // Keep self-preview mirrored in composite.
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(localVideoEl, 0, 0, halfW, h);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = "#111";
+        ctx.fillRect(halfW, 0, halfW, h);
+      }
+
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillRect(halfW - 1, 0, 2, h);
+
+      pipAnimationRef.current = requestAnimationFrame(render);
+    };
+
+    render();
+
+    const canvasStream =
+      typeof canvas.captureStream === "function" ? canvas.captureStream(15) : null;
+    if (canvasStream) {
+      pipVideoEl.srcObject = canvasStream;
+    } else {
+      // Fallback to local-only stream if canvas stream is unavailable.
+      pipVideoEl.srcObject = new MediaStream(localStream.getVideoTracks());
+    }
+
+    pipVideoEl.muted = true;
+    pipVideoEl.playsInline = true;
+    void pipVideoEl.play().catch(() => {});
+
+    return () => {
+      if (pipAnimationRef.current) {
+        cancelAnimationFrame(pipAnimationRef.current);
+        pipAnimationRef.current = null;
+      }
+      pipVideoEl.srcObject = null;
+    };
+  }, [getLocalStream, inCall, localVideoRef, remoteVideoRef]);
 
   const stopRingtone = () => {
     if (ringtoneTimerRef.current) {
@@ -197,6 +275,14 @@ export default function Call({ onLogout }) {
         return false;
       }
 
+      if (typeof videoEl.play === "function") {
+        try {
+          await videoEl.play();
+        } catch (_) {
+          // Some browsers block play without gesture; continue to PiP attempts.
+        }
+      }
+
       // Standard PiP API (Chrome/Edge/Android/Safari where supported).
       if (typeof videoEl.requestPictureInPicture === "function") {
         try {
@@ -233,11 +319,12 @@ export default function Call({ onLogout }) {
       }
 
       // Include own camera in PiP preference for mobile experience.
+      const pipLocalVideoEl = pipLocalVideoRef.current;
       const localVideoEl = localVideoRef.current;
       const remoteVideoEl = remoteVideoRef.current;
       const candidates = isCameraOff
-        ? [remoteVideoEl, localVideoEl]
-        : [localVideoEl, remoteVideoEl];
+        ? [remoteVideoEl, pipLocalVideoEl, localVideoEl]
+        : [pipLocalVideoEl, localVideoEl, remoteVideoEl];
 
       for (const candidate of candidates) {
         // Stop after first successful PiP transition.
@@ -506,6 +593,14 @@ export default function Call({ onLogout }) {
         open={showRingingModal}
         onAccept={handleAccept}
         onDecline={handleDecline}
+      />
+      <canvas ref={pipCanvasRef} className="pip-canvas-source" />
+      <video
+        ref={pipLocalVideoRef}
+        className="pip-local-source"
+        autoPlay
+        muted
+        playsInline
       />
       <div className="remote-video-shell">
         <video className="remote-video" ref={remoteVideoRef} autoPlay playsInline />

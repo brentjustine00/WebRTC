@@ -290,6 +290,8 @@ export function useWebRTC({ enabled, publishSignal, clearSignals }) {
     setIsCameraOff(nextCameraOff);
   }, [isCameraOff]);
 
+  const getLocalStream = useCallback(() => localStreamRef.current, []);
+
   const attemptReconnect = useCallback(async () => {
     if (reconnectLockRef.current || !isMountedRef.current) {
       return;
@@ -378,5 +380,6 @@ export function useWebRTC({ enabled, publishSignal, clearSignals }) {
     attemptReconnect,
     toggleMute,
     toggleCamera,
+    getLocalStream,
   };
 }
