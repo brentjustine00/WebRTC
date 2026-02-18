@@ -164,6 +164,11 @@ export function useSignaling(roomName, enabled) {
     [publishCallStatusBroadcast, userId],
   );
 
+  const resetCallState = useCallback(async () => {
+    await clearSignals();
+    await updateCallStatus("idle");
+  }, [clearSignals, updateCallStatus]);
+
   useEffect(() => {
     if (!enabled) {
       return undefined;
@@ -249,7 +254,7 @@ export function useSignaling(roomName, enabled) {
 
       const { data, error } = await supabase
         .from("call_status")
-        .select("status")
+        .select("status, updated_at")
         .eq("id", 1)
         .maybeSingle();
 
@@ -269,6 +274,19 @@ export function useSignaling(roomName, enabled) {
       }
 
       if (data?.status) {
+        // If previous call state is stale, normalize to idle for new sessions.
+        const updatedAtMs = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+        const isStale = Date.now() - updatedAtMs > 30_000;
+        if (
+          isStale &&
+          (data.status === "ringing" || data.status === "accepted")
+        ) {
+          await clearSignals();
+          await updateCallStatus("idle");
+          setCallStatusState("idle");
+          setCallStatusSender(null);
+          return;
+        }
         setCallStatusState(data.status);
         setCallStatusSender(null);
       }
@@ -297,6 +315,7 @@ export function useSignaling(roomName, enabled) {
     registerStatusHandler,
     publishSignal,
     clearSignals,
+    resetCallState,
     updateCallStatus,
   };
 }

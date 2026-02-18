@@ -75,6 +75,10 @@ If your project shows:
 run:
 - `supabase/fix_signals.sql`
 
+If calls get stuck on `connecting` across new devices/sessions:
+1. Run `supabase/fix_signals.sql` (cleans stale signals + adds pruning trigger)
+2. Run `supabase/fix_call_status.sql` (resets status to `idle`)
+
 ## Install & Run
 
 ```bash

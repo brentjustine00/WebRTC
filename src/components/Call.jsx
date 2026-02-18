@@ -11,6 +11,12 @@ export default function Call({ onLogout }) {
   const [showRingingModal, setShowRingingModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [uiVisible, setUiVisible] = useState(true);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.matchMedia("(max-width: 859px)").matches;
+  });
   const [isDraggingPip, setIsDraggingPip] = useState(false);
   const [pipPosition, setPipPosition] = useState(null);
   const [localAspectRatio, setLocalAspectRatio] = useState("16 / 9");
@@ -34,6 +40,7 @@ export default function Call({ onLogout }) {
     registerSignalHandler,
     publishSignal,
     clearSignals,
+    resetCallState,
     updateCallStatus,
   } = useSignaling(ROOM_NAME, true);
 
@@ -175,6 +182,57 @@ export default function Call({ onLogout }) {
   }, []);
 
   useEffect(() => {
+    const mq = window.matchMedia("(max-width: 859px)");
+    const apply = () => setIsMobileViewport(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => {
+      mq.removeEventListener("change", apply);
+    };
+  }, []);
+
+  useEffect(() => {
+    const requestMobilePip = async () => {
+      if (!inCall || !document.fullscreenElement) {
+        return;
+      }
+
+      const videoEl = remoteVideoRef.current || localVideoRef.current;
+      if (!videoEl || typeof videoEl.requestPictureInPicture !== "function") {
+        return;
+      }
+
+      if (document.pictureInPictureElement) {
+        return;
+      }
+
+      try {
+        await videoEl.requestPictureInPicture();
+      } catch (_) {
+        // Ignore browsers/devices that block PiP without a fresh gesture.
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        void requestMobilePip();
+      }
+    };
+
+    const handlePageHide = () => {
+      void requestMobilePip();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [inCall, localVideoRef, remoteVideoRef]);
+
+  useEffect(() => {
     return () => {
       stopRingtone();
     };
@@ -186,6 +244,7 @@ export default function Call({ onLogout }) {
     offerSentForAcceptedRef.current = false;
     setShowRingingModal(false);
     stopRingtone();
+    await resetCallState();
     await preparePeer();
     await updateCallStatus("ringing");
   };
@@ -212,6 +271,7 @@ export default function Call({ onLogout }) {
     setIsCaller(false);
     isCallerRef.current = false;
     offerSentForAcceptedRef.current = false;
+    await clearSignals();
     await updateCallStatus("ended");
   };
 
@@ -268,9 +328,11 @@ export default function Call({ onLogout }) {
   }, [showRingingModal]);
 
   useEffect(() => {
-    // When UI visibility changes, return local preview to anchored layout.
-    setPipPosition(null);
-  }, [uiVisible]);
+    // Desktop keeps anchored behavior; mobile keeps dragged position permanently.
+    if (!isMobileViewport) {
+      setPipPosition(null);
+    }
+  }, [isMobileViewport, uiVisible]);
 
   const toggleFullscreen = async () => {
     try {

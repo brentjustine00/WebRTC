@@ -11,6 +11,10 @@ create table if not exists public.signals (
 
 create index if not exists idx_signals_created_at on public.signals (created_at);
 
+-- Remove stale rows once when running this fix.
+delete from public.signals
+where created_at < timezone('utc'::text, now()) - interval '15 minutes';
+
 alter table public.signals enable row level security;
 
 drop policy if exists "signals_rw" on public.signals;
@@ -28,3 +32,21 @@ begin
     when duplicate_object then null;
   end;
 end $$;
+
+-- Keep the table clean to avoid stale negotiation collisions.
+create or replace function public.prune_old_signals()
+returns trigger
+language plpgsql
+as $$
+begin
+  delete from public.signals
+  where created_at < timezone('utc'::text, now()) - interval '15 minutes';
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_prune_old_signals on public.signals;
+create trigger trg_prune_old_signals
+after insert on public.signals
+for each statement
+execute function public.prune_old_signals();

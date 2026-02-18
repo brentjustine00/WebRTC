@@ -11,6 +11,12 @@ insert into public.call_status (id, status)
 values (1, 'idle')
 on conflict (id) do nothing;
 
+-- Normalize status at fix time in case previous sessions were stuck.
+update public.call_status
+set status = 'idle',
+    updated_at = timezone('utc'::text, now())
+where id = 1;
+
 alter table public.call_status enable row level security;
 
 drop policy if exists "call_status_rw" on public.call_status;
