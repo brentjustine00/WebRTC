@@ -192,13 +192,39 @@ export default function Call({ onLogout }) {
   }, []);
 
   useEffect(() => {
-    const requestMobilePip = async () => {
-      if (!inCall || !document.fullscreenElement) {
-        return;
+    const enterPipForVideo = async (videoEl) => {
+      if (!videoEl) {
+        return false;
       }
 
-      const videoEl = remoteVideoRef.current || localVideoRef.current;
-      if (!videoEl || typeof videoEl.requestPictureInPicture !== "function") {
+      // Standard PiP API (Chrome/Edge/Android/Safari where supported).
+      if (typeof videoEl.requestPictureInPicture === "function") {
+        try {
+          await videoEl.requestPictureInPicture();
+          return true;
+        } catch (_) {
+          // Continue to WebKit fallback.
+        }
+      }
+
+      // iOS/iPadOS Safari fallback.
+      if (
+        typeof videoEl.webkitSetPresentationMode === "function" &&
+        videoEl.webkitSupportsPresentationMode?.("picture-in-picture")
+      ) {
+        try {
+          videoEl.webkitSetPresentationMode("picture-in-picture");
+          return true;
+        } catch (_) {
+          // Ignore if browser blocks this transition.
+        }
+      }
+
+      return false;
+    };
+
+    const requestMobilePip = async () => {
+      if (!inCall || !document.fullscreenElement) {
         return;
       }
 
@@ -206,10 +232,20 @@ export default function Call({ onLogout }) {
         return;
       }
 
-      try {
-        await videoEl.requestPictureInPicture();
-      } catch (_) {
-        // Ignore browsers/devices that block PiP without a fresh gesture.
+      // Include own camera in PiP preference for mobile experience.
+      const localVideoEl = localVideoRef.current;
+      const remoteVideoEl = remoteVideoRef.current;
+      const candidates = isCameraOff
+        ? [remoteVideoEl, localVideoEl]
+        : [localVideoEl, remoteVideoEl];
+
+      for (const candidate of candidates) {
+        // Stop after first successful PiP transition.
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await enterPipForVideo(candidate);
+        if (ok) {
+          break;
+        }
       }
     };
 
@@ -230,7 +266,7 @@ export default function Call({ onLogout }) {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [inCall, localVideoRef, remoteVideoRef]);
+  }, [inCall, isCameraOff, localVideoRef, remoteVideoRef]);
 
   useEffect(() => {
     return () => {
