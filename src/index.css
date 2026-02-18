@@ -1,0 +1,377 @@
+:root {
+  --ink: #f7fbff;
+  --sand: #f7f3e9;
+  --ocean: #061a2f;
+  --ocean-soft: #0f2f50;
+  --teal: #1d9a8a;
+  --coral: #dc5f5f;
+  --amber: #d9902a;
+  --glass: rgba(7, 28, 47, 0.48);
+  --glass-border: rgba(247, 251, 255, 0.18);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(160deg, #0a2239 0%, #134267 60%, #1d6b7f 100%);
+  color: var(--ink);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.card {
+  background: #ffffff;
+  color: #17324f;
+  border-radius: 20px;
+  box-shadow: 0 16px 48px rgba(5, 18, 34, 0.25);
+}
+
+.login-card,
+.room-full-card {
+  width: min(430px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 28px;
+}
+
+input,
+button {
+  border-radius: 12px;
+  border: none;
+  font-size: 0.96rem;
+  padding: 11px 13px;
+  font-family: inherit;
+}
+
+input {
+  background: #ecf4ff;
+}
+
+button {
+  background: #145a87;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: var(--coral);
+}
+
+.btn-success {
+  background: #279a6f;
+}
+
+.btn-warning {
+  background: var(--amber);
+}
+
+.error-text {
+  color: #c83d3d;
+  font-size: 0.9rem;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+}
+
+.call-stage {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.remote-video-shell {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #020b14;
+  max-height: 100vh;
+}
+
+.remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scaleX(-1);
+}
+
+.stage-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top, rgba(10, 34, 57, 0.15), rgba(10, 34, 57, 0.55)),
+    linear-gradient(to top, rgba(6, 26, 47, 0.88) 0%, rgba(6, 26, 47, 0.26) 55%, rgba(6, 26, 47, 0.52) 100%);
+  z-index: 1;
+}
+
+.stage-header {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.stage-title {
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background: var(--glass);
+  backdrop-filter: blur(9px);
+}
+
+.stage-title h1 {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: 0.2px;
+}
+
+.stage-title p {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  opacity: 0.9;
+}
+
+.ghost-btn {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  color: var(--sand);
+  backdrop-filter: blur(9px);
+}
+
+.logout-btn {
+  border-color: rgba(220, 95, 95, 0.5);
+  color: #ffdada;
+}
+
+.dashboard-strip {
+  position: absolute;
+  top: 92px;
+  left: 14px;
+  right: 14px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.glass-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 10px;
+  backdrop-filter: blur(9px);
+  display: grid;
+  gap: 4px;
+}
+
+.glass-card span {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.82;
+}
+
+.glass-card strong {
+  font-size: 0.92rem;
+}
+
+.local-pip {
+  position: absolute;
+  right: 14px;
+  bottom: 150px;
+  width: 35vw;
+  min-width: 112px;
+  max-width: 170px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  background: rgba(8, 22, 40, 0.7);
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition:
+    right 220ms ease,
+    bottom 220ms ease,
+    width 220ms ease,
+    max-width 220ms ease,
+    transform 220ms ease,
+    opacity 220ms ease;
+}
+
+.local-pip video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.local-pip.dragging {
+  cursor: grabbing;
+}
+
+.local-pip.is-custom-pos {
+  right: auto;
+  bottom: auto;
+}
+
+.local-pip.docked {
+  right: 10px;
+  bottom: 10px;
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.local-pip.camera-off {
+  min-height: 130px;
+  display: grid;
+  place-items: center;
+}
+
+.local-pip.camera-off video {
+  display: none;
+}
+
+.stage-controls {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 20px;
+  z-index: 7;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stage-controls button {
+  border-radius: 14px;
+  padding: 13px 10px;
+}
+
+.stage-hint {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 118px;
+  z-index: 7;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  padding: 9px 11px;
+  font-size: 0.84rem;
+  backdrop-filter: blur(8px);
+}
+
+.stage-error {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 118px;
+  z-index: 8;
+  background: rgba(208, 61, 61, 0.92);
+  border-radius: 12px;
+  padding: 9px 11px;
+  font-size: 0.84rem;
+}
+
+.overlay-ui {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.call-stage.ui-hidden .overlay-ui {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 18, 33, 0.58);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.modal {
+  width: min(390px, calc(100vw - 24px));
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+}
+
+@media (min-width: 860px) {
+  .stage-header {
+    top: 20px;
+    left: 20px;
+    right: 20px;
+  }
+
+  .dashboard-strip {
+    top: 102px;
+    left: 20px;
+    right: auto;
+    width: 460px;
+    gap: 10px;
+  }
+
+  .local-pip {
+    right: 24px;
+    bottom: 112px;
+    max-width: 220px;
+    width: 20vw;
+  }
+
+  .stage-controls {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(720px, calc(100vw - 40px));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .stage-hint,
+  .stage-error {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(500px, calc(100vw - 40px));
+  }
+}
