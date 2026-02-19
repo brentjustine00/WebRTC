@@ -12,7 +12,22 @@ const MEDIA_CONSTRAINTS = {
   },
 };
 
-const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+const DEFAULT_STUN_SERVERS = [
+  "stun:stun.l.google.com:19302",
+  "stun:stun1.l.google.com:19302",
+  "stun:stun2.l.google.com:19302",
+  "stun:stun.cloudflare.com:3478",
+  "stun:global.stun.twilio.com:3478",
+];
+const EXTRA_STUN_URLS = (import.meta.env.VITE_EXTRA_STUN_URLS || "")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
+
+function buildIceServers() {
+  const stunSet = new Set([...DEFAULT_STUN_SERVERS, ...EXTRA_STUN_URLS]);
+  return [{ urls: Array.from(stunSet) }];
+}
 
 export function useWebRTC({ enabled, publishSignal, clearSignals }) {
   const localVideoRef = useRef(null);
@@ -32,6 +47,29 @@ export function useWebRTC({ enabled, publishSignal, clearSignals }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [error, setError] = useState("");
+
+  const tuneSender = useCallback(async (sender, kind) => {
+    if (!sender || typeof sender.getParameters !== "function") {
+      return;
+    }
+    try {
+      const params = sender.getParameters();
+      params.encodings = params.encodings?.length ? params.encodings : [{}];
+
+      if (kind === "video") {
+        params.encodings[0].maxBitrate = 400_000;
+        params.encodings[0].maxFramerate = 20;
+        params.degradationPreference = "maintain-framerate";
+      }
+      if (kind === "audio") {
+        params.encodings[0].maxBitrate = 32_000;
+      }
+
+      await sender.setParameters(params);
+    } catch (_) {
+      // Some browsers may reject sender tuning; keep default behavior.
+    }
+  }, []);
 
   const attachRemoteStream = useCallback(() => {
     if (!remoteStreamRef.current) {
@@ -90,7 +128,13 @@ export function useWebRTC({ enabled, publishSignal, clearSignals }) {
   );
 
   const buildPeerConnection = useCallback(() => {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({
+      iceServers: buildIceServers(),
+      iceCandidatePoolSize: 4,
+      bundlePolicy: "max-bundle",
+      rtcpMuxPolicy: "require",
+      iceTransportPolicy: "all",
+    });
     pcRef.current = pc;
     remoteDescriptionSetRef.current = false;
     pendingCandidatesRef.current = [];
@@ -99,12 +143,13 @@ export function useWebRTC({ enabled, publishSignal, clearSignals }) {
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current);
+        const sender = pc.addTrack(track, localStreamRef.current);
+        void tuneSender(sender, track.kind);
       });
     }
 
     return pc;
-  }, [attachRemoteStream, setPcListeners]);
+  }, [attachRemoteStream, setPcListeners, tuneSender]);
 
   const ensureLocalMedia = useCallback(async () => {
     if (localStreamRef.current) {
@@ -183,6 +228,17 @@ export function useWebRTC({ enabled, publishSignal, clearSignals }) {
       if (!pc || pc.signalingState === "closed") {
         return;
       }
+
+      // Ignore stale/duplicate answers that arrive after negotiation is already stable.
+      if (pc.signalingState === "stable") {
+        return;
+      }
+
+      // Answer is only valid when we are waiting for it.
+      if (pc.signalingState !== "have-local-offer") {
+        return;
+      }
+
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       remoteDescriptionSetRef.current = true;
       await flushPendingCandidates(pc);
